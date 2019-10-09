@@ -1,76 +1,440 @@
-# Redux-oo (Oriented Object)
-Experimenting redux-like design patterns
+# Erudx
+**write modular, composable, OOP-style stores for Redux and/or React's hooks**  
+**Erudx** (*= redux anagram = **Eru**dite re**d**u**x***) is a library meant to be used together with Redux or React's hooks to handle state in JavaScript apps.  
+It helps you write modular and composable stores, using everything you know about OOP.  
+You can concentrate on writting classes and let Erudx generate the reducers, handle "immutability", name actions, etc...  
+In some cases it also eliminates the need for libraries such as redux-saga, redux-thunk, etc...  
+This library has no dependencies and is lightweight.
+It's available on npm:
+```bash
+	#npm
+	npm install --save erudx
 
-Using decartors. Will create a version without decorators in the future
+	#yarn
+	yarn add erudx
+```
 
-Simple example
+## Status
+**Erudx is still at an early stage and is NOT ready for production. The API will probably change a lot**  
+Contibutions are welcome! It can be as simple as suggestions for better naming of methods and decorators.
+
+Table of contents
+- [Erudx](#erudx)
+	- [Status](#status)
+	- [Usage](#usage)
+		- [Basic usage](#basic-usage)
+		- [Inheritance](#inheritance)
+		- [Composition](#composition)
+	- [Pitfalls](#pitfalls)
+	- [Performance](#performance)
+
+## Usage
+You can find more examples [here](https://github.com/atersolis/erudx-examples).  
+You should be familiar with [Redux](https://redux.js.org/) before trying to use this library.  
+Erudx is using decorators so you will need a transpiler or use Typescript for instance.  
+If you have not heard of [decorators](https://www.typescriptlang.org/docs/handbook/decorators.html) you should probably learn about it.  
+A version without decorators might be introduced later.  
+
+**What follow is more a guide than a documentation.**  
+There is no "documentation" yet but the library was written with Typescript so you get type hinting.
+
+### Basic usage
+For a basic usage you will need only two decorators:
+- `@action` to mark mutating methods. Those methods will be replaced by a generated function calling `dispatch`.
+  Those mutating **must return void**, because the substitute method will return void anyway.
+- `@store` a class decorator that will generate a reducer for the class.
+  The generated reducer will clone the store instance, apply the mutating method to the new store, then return it.
+
+Here is a simple `counter` example with React, using hooks.
+
 ```tsx
-import * as React from "preact";
-import {store, action, Store, useStore} from './lib/store';
-
-function sleep(ms) {
-	return new Promise(res => setTimeout(res, ms));
-}
+import * as React from "react";
+import { store, action, props } from "erudx";
+import { useStore } from "erudx/hooks";
+import "./counter-style.css"
 
 @store
-class CounterStore extends Store {
-	readonly counter: number = 0;
+class CounterStore {
+	counter: number = 0;
 
 	constructor(x) {
-		super();
 		this.counter = x;
 	}
 
-	/** Increment the counter */
 	@action
 	increment() {
-		this.commit(new CounterStore(this.counter + 1));
+		this.counter++;
 	}
 
-	/** Decrement the counter */
 	@action
 	decrement() {
-		this.commit(new CounterStore(this.counter - 1));
-	}
-	
-	/** Invert the counter */
-	@action
-	invert() {
-		this.commit(new CounterStore(-this.counter));
-	}
-
-	/** Absolute value of the counter */
-	abs() {
-		return Math.abs(this.counter);
-	}
-
-	/**
-	 * Increment the counter, sleep ${ms} millisecond and increment again
-	 * @param ms 
-	 */
-	async incrementAfterDelay(ms) {
-		this.increment();
-		await sleep(ms);
-		this.increment();
+		this.counter--;
 	}
 }
 
-const App = () => {
-	let counter = useStore(CounterStore, 0);
-
+const Counter = ({ counter, increment, decrement }) => {
 	return (
-		<div>
-			<h1>My counter</h1>
-			<button onClick={() => counter.incrementAfterDelay(1000)}>+ZzzzZz+</button>
-			<button onClick={() => counter.increment()}>+</button>
-			<button onClick={() => counter.decrement()}>-</button>
-			<button onClick={() => counter.invert()}>*(-1)</button>
-			<p>Counter {JSON.stringify(counter)}</p>
-			<p>Counter {counter.counter}</p>
-			<p>Abs counter {counter.abs()}</p>
+		<div class="counter-container">
+			<h1 class="counter-number">{counter}</h1>
+			<div class="counter-actions">
+				<button class="plus" onClick={decrement}>-</button>
+				<button class="minus" onClick={increment}>+</button>
+			</div>
 		</div>
 	);
 };
 
-export default App;
+const CounterApp = () => {
+	let counter = useStore(new CounterStore(0));
+	return <Counter {...props(counter)} />;
+};
+
+export default CounterApp;
 ```
+Lets start the explanation at CounterApp.  
+First we use hooks to handle the state of our app.  
+`useStore` is a simple wrapper function around `useReducer`:  
+```tsx
+const dispatch = Symbol("dispatch");
+const reducer = Symbol("reducer");
+///...
+function useStore<Store extends object>(initValue: Store): Store {
+	let [state, disp] = useReducer(initValue.constructor[reducer], initValue);
+	define(state, dispatch, disp);
+	return state as Store;
+}
+```
+First we call useReducer is we provide it a reducer and a initial value.  
+`initValue.constructor[reducer]` is a reducer generated by `@store` for the class.  
+The store itself is the default value.  
+
+`define(state, dispatch, disp)` will simply add a hidden property using `Object.defineProperty`.  
+The dispatcher is then available at `this[dispatch]`.  
+Note that the `dispatch` Symbol is internal to the library, and not exported.  
+
+Then, when you call `counter.increment()`, it will call a substitute method equivalent to:
+```tsx
+function increment(...params) {
+	this[dispatch]({ type: "increment", payload: [...params] });
+}
+```
+
+This will call React's (or Redux's) dispatch function which, in turn, will call `initValue.constructor[reducer]`.
+This generated reducer is roughly equivalent to:
+```tsx
+	const actions = {
+		// Only methods of CounterStore marked by @action
+		"increment": CounterStore.prototype.increment,
+		"decrement": CounterStore.prototype.decrement,
+		//...
+	};
+
+	function reducer(state, action) {
+		let type = action.type;
+		if(actions[type]) {
+			let newState = clone(state);
+			actions[type].apply(newState, action.payload);
+			return newState;
+		} else {
+			return state;
+		}
+	}
+```
+
+The `props` function return an object containing the store's properties and its methods, bound to the instance.
+Its roughly equivalent to:
+```tsx
+function props(store) {
+	let obj = {...store};
+	let proto = store.constructor.prototype;
+	for(let methodName in proto) {
+		obj[methodName] = proto[methodName].bind(store);
+	}
+	return obj;
+}
+```
+
+### Inheritance
+Since a store class is just a normal class with a few generated methods, you can use inheritence.
+Note however, that you need to use @store again on the Child class to generate the reducer.
+
+```tsx
+const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+@store
+class AdvancedCounterStore extends CounterStore {
+	constructor(x) {
+		super(x);
+	}
+
+	@action
+	opposite() {
+		this.counter = -this.counter;
+	}
+
+	abs() {
+		return Math.abs(this.counter);
+	}
+
+	async delayedIncrement() {
+		await sleep(1000);
+		this.increment();
+	}
+}
+
+const AdvancedCounterApp = () => {
+	let counter = useStore(new AdvancedCounterStore(0));
+	return <div>
+		<span>{counter.counter}</span>
+		<span>{counter.abs()}</span>
+		<button onClick={counter.opposite.bind(counter)}>*-1</button>
+		<button onClick={counter.delayedIncrement.bind(counter)}>zZZZz ++</button>
+	</div>;
+};
+
+export default CounterApp;
+```
+
+Note that when you call `this.increment()` in delayedIncrement, it dispatch the `increment` action.
+You can use this to replace redux-saga in many cases:
+
+```tsx
+class UserCollectionStore {
+	users: object;
+	status: string;
+	//...
+	@action
+	setIsLoading() {
+		this.status = 'is_loading';
+	}
+
+	@action
+	setUsers(users: object[]) {
+		this.users = users;
+	}
+
+	async loadUsers() {
+		this.setIsLoading();
+		let usersReq = await fetch("https://example.com/users");
+		let users = await usersReq.json();
+		this.setUsers(users);
+	}
+}
+```
+
+### Composition
+Erudx support stores composition.
+For instance you can create a collection of CounterStore like this :
+
+```tsx
+import { CollectionStore } from "erudx/stores";
+
+const CountersApp = () => {
+	let counters = useStore(
+		new CollectionStore([
+			new CounterStore(0),
+			new CounterStore(1),
+			new CounterStore(2)
+		])
+	);
+
+	return <div>
+		{counters.map(counter => <Counter {...props(counter)} />)}
+		<button onClick={() => counters.push(new CounterStore(0))}>
+			AddCounter
+		</button>
+	</div>
+};
+```
+
+Erudx implement store composition by using nested actions internally.  
+Since we have three CounterStores, each having an `increment` action, we need to wrap our `increment` action inside a routing action, to route our `increment` action to `counters.get(1)`.  
+Therefore, `counters.get(1).increment()` will dispatch a nested action:  
+`{ type: "@route", payload: [1, { type: "increment", payload: [] }] }`  
+`counters.push` is also an action, so when calling that method, you actually dispatch the following action:  
+`{type: "push", payload:[...values]}`  
+
+
+Erudx also have a record function, instancing a RecordStore class:
+```tsx
+import { record } from "erudx/stores";
+
+const CountersApp = () => {
+	let counters = useStore(record({
+		counter1: new CounterStore(0),
+		counter2: new CounterStore(1)
+	}));
+
+	function incrementBoth() {
+		//React will automatically batch the two actions and re-render only once
+		counters.counter1.increment();
+		counters.counter2.increment();
+	}
+
+	return <div>
+		<Counter {...props(counters.counter1)} />
+		<Counter {...props(counters.counter2)} />
+		<button onClick={incrementBoth}>Increment both</button>
+	</div>
+}
+```
+
+Let us implement a SimpleCollectionStore class to understand how things work internally:
+
+```tsx
+import { store, mount, route, reduce, action, afterClone } from "../index";
+
+@store
+class SimpleColletionStore<T> {
+	items: T[];
+
+	constructor(items: T[]) {
+		this.items = [...items];
+		this.items.forEach((item, i) => mount(item, this, i));
+	}
+
+	get(index: number) {
+		return this.items[i];
+	}
+
+
+	@action
+	set(index: number, item: T) {
+		this.items[index] = item;
+	}
+
+	@action
+	push(...items: T[]) {
+		let l = this.items.length;
+		this.items.push(...items);
+		for(let i = l; i < this.items.length; i++) {
+			mount(item, this, i);
+		}
+	}
+
+	@action
+	insert(index: number, item : T) {
+		this.items.splice(index, 0, item);
+		for(let i = index; i < this.items.length; i++) {
+			mount(this.items[i], this, i);
+		}
+	}
+
+	@action
+	remove(index: number) {
+		this.items.splice(index, 1);
+		for(let i = index; i < this.items.length; i++) {
+			mount(this.items[i], this, i);
+		}
+	}
+
+	get length() {
+		return this.items.length;
+	}
+	
+	@route
+	private route(index: number, action) {
+		this.items[index] = reduce(this.items[index], action);
+	}
+
+	@afterClone
+	private afterClone() {
+		this.items = [...this.items];
+	}
+}
+```
+
+First the `mount` function:
+```tsx
+	mount(store, parent, route)
+```
+
+Basically this tells `store` that its parent is `parent` and that its path inside `parent` is `route`.  
+Those informations are stored as a property of `store` thanks to `Object.defineProperty` and using a symbol as a key, so it does not appear in `Object.keys()` and won't interfere with other properties.
+
+When you call `mount`, `parent` becomes the owner of `store`, and a store can only have one owner.  
+This is how you can dispatch an action as easily as `counters.get(1).increment()`.  
+
+In the case of our Collection, the route of an item is simply its index in the array.  
+Therefore, we have to call `mount` several times:
+- In our constructor and in the `push` action to set the parent and the index.
+- In `remove` and `insert` to update the index of our items.
+
+At the end of our class there is two methods, with two decorators:  
+
+The `route` method with the `@route` decorator. The name of the method doesn't matter.  
+It will be called to the actions of its child stores.  
+For instance, if we call `counters.get(index).increment()`, `route` will be called like this:  
+`route.call(counters, index, {type: "increment", payload: []})` because `counters.get(index)` is mounted at `index`. 
+Then `route` must transmit the action to the right store.
+In our case, we decided that the route of an item would be its index in `this.items`.
+Therefore we will route the action to `this.items[index]`.
+For that we call `reduce(this.items[index], action)`, which will execute `this.items[index].constructor[reducer]` with `action` as a parameter.
+And at last, we need to make sure that `this.items[index]` points to the new version created by reduce, and thus:  
+`this.items[index] = reduce(...)`
+
+Note that there is a default `route` method, overrided when we mark an other method with `@route`.  
+If the route is `['a', 'b', 2]` then it will execute: `this.a.b[2] = reduce(this.a.b[2], action)`
+
+Finally the last method is `afterClone`.
+There is three decorators related to store cloning:
+- `@beforeClone` : the decorated method will be called before the store is cloned by the reducer.
+- `@clone` : the decorated method will be used to clone the store, and must return a new store.
+- `@afterClone` : the decorated method will be called after the store has been cloned.
+
+In our case we use `@afterClone` to duplicate our items array, because we don't want our stores to share the same array instance (we want to keep an history of the state for easier debugging with redux).
+
+
+## Pitfalls
+Do **NOT** call an action inside an action, it's like calling dispatch inside a reducer !
+**This is anti-pattern:**
+
+```tsx
+class Foo {
+	x: number;
+
+	@action
+	foo(y: number) {
+		this.x = (y * 3 + 4) * (this.x + 2);
+	}
+
+	@action
+	bar(y: number) {
+		// THIS IS A VERY BAD IDEA
+		this.foo(-y);
+	}
+}
+```
+
+Do this instead: 
+```tsx
+class Foo {
+	x: number;
+
+	private calc(y: number) {
+		this.x = (y * 3 + 4) * (this.x + 2);
+	}
+
+	@action
+	foo(y: number) {
+		this.calc(y);
+	}
+
+	@action
+	bar(y: number) {
+		this.calc(-y);
+	}
+}
+```
+
+## Performance
+I write this because the first thing I'm asked when I talk about this library is : "what about its performance ?"
+Well it really depends on how you use it but if you want a takeaway then it would be : **You don't need to worry about that**
+1. Although there is probably a slight overhead compared to vanilla redux it probably doesn't matter :  
+   what you put inside the actions and the overall design of your state is much more important.
+2. The performance of actions is not that critical to begin with.
+   In most cases, actions will be trigerred by the user and at most a few of times a second.
+
+So unless you trigger thousands of actions every second, there should be no perceptible overhead to vanilla redux.
+
+Althought, if you have big arrays (more than 10000) then you might want to use erudx together with immutable.js, because erudx makes a copy of the collection before mutating it with an action.
