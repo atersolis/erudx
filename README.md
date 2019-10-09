@@ -40,12 +40,12 @@ There is no "documentation" yet but the library was written with Typescript so y
 
 ### Basic usage
 For a basic usage you will need only two decorators:
-- `@action` to mark mutating methods. Those methods will be replaced by a generated function calling `dispatch`.
-  Those mutating **must return void**, because the substitute method will return void anyway.
-- `@store` a class decorator that will generate a reducer for the class.
+- `@action` to mark mutating methods. Those methods will be replaced by a generated function calling `dispatch`.  
+  Those mutating methods **must return void**, because the substitute method will return void anyway.  
+- `@store` a class decorator that will generate a reducer for the class.  
   The generated reducer will clone the store instance, apply the mutating method to the new store, then return it.
 
-Here is a simple `counter` example with React, using hooks.
+Here is a simple `counter` example with React, using hooks :
 
 ```tsx
 import * as React from "react";
@@ -168,8 +168,8 @@ class AdvancedCounterStore extends CounterStore {
 	}
 
 	@action
-	opposite() {
-		this.counter = -this.counter;
+	multiply(factor: number) {
+		this.counter = this.counter * factor;
 	}
 
 	abs() {
@@ -187,7 +187,7 @@ const AdvancedCounterApp = () => {
 	return <div>
 		<span>{counter.counter}</span>
 		<span>{counter.abs()}</span>
-		<button onClick={counter.opposite.bind(counter)}>*-1</button>
+		<button onClick={() => counter.multiply(-1)}>*-1</button>
 		<button onClick={counter.delayedIncrement.bind(counter)}>zZZZz ++</button>
 	</div>;
 };
