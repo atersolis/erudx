@@ -5,14 +5,7 @@ It helps you write modular and composable stores, using everything you know abou
 You can concentrate on writting classes and let Erudx generate the reducers, handle "immutability", name actions, etc...  
 In some cases it also eliminates the need for libraries such as redux-saga, redux-thunk, etc...  
 This library has no dependencies and is lightweight.
-It's available on npm:
-```bash
-	#npm
-	npm install --save erudx
-
-	#yarn
-	yarn add erudx
-```
+It's available on npm: `npm install erudx`
 
 ## Status
 **Erudx is still at an early stage and is NOT ready for production. The API will probably change a lot**  
