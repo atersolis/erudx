@@ -2,7 +2,7 @@ import { useReducer } from "react";
 import { reducer, dispatch, define, assertHasReducer } from "../utils";
 
 /**
- * To use the store as a took 
+ * To use the store as a hook 
  * @param initValue initial value of store
  */
 export function useStore<Store extends object>(initValue: Store): Store {

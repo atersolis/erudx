@@ -45,11 +45,29 @@ export function action(_, type: string, descriptor: PropertyDescriptor) {
 	return descriptor;
 }
 
+export function compoundAction(target, methodName) {
+	//Do nothing for now...
+}
+
 /**
  * Method decorator. Mark current method as router method
  */
 export function route(target, methodName: string) {
 	target.constructor[routerAction] = methodName;
+}
+
+/**
+ * Return the reducer associated to the store
+ */
+export function getReducer<Store extends Object>(store: Store) : (state: Store, action: any) => Store {
+	return store.constructor[reducer];
+}
+
+/**
+ * Tell the store to use {dispatchFunc} when dispatching an action
+ */
+export function setDispatch(store, dispatchFunc) {
+	define(store, dispatch, dispatchFunc);
 }
 
 /**

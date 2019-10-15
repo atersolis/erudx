@@ -18,6 +18,7 @@ Table of contents
 		- [Basic usage](#basic-usage)
 		- [Inheritance](#inheritance)
 		- [Composition](#composition)
+			- [Compound actions](#compound-actions)
 	- [Pitfalls](#pitfalls)
 	- [Performance](#performance)
 
@@ -377,6 +378,32 @@ There is three decorators related to store cloning:
 
 In our case we use `@afterClone` to duplicate our items array, because we don't want our stores to share the same array instance (we want to keep an history of the state for easier debugging with redux).
 
+#### Compound actions
+
+```tsx
+class ExtendedCounterStore extends CounterStore {
+	@action
+	setTo(value: number) {
+		this.counter = value;
+	}
+}
+
+@store
+class CounterCollectionStore extends CollectionStore<ExtendedCounterStore> {
+	@compoundAction
+	setCountersTo(value: number) {
+		for(let counter of this) {
+			// This is an action so it triggers a dispatch
+			counter.setTo(value);
+		}
+	}
+}
+
+```
+So what does `@compoundAction` do ?
+For now nothing, but in the future it should batch the many actions triggered by the loop.
+Right now, this would clone the CounterCollectionStore for each action in the loop, and is therefore quite inefficient.
+In the future it could consider `@compoundAction` as a single action and remove unnecessary cloning.
 
 ## Pitfalls
 Do **NOT** call an action inside an action, it's like calling dispatch inside a reducer !

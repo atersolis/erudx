@@ -7,7 +7,9 @@
 	"author": "",
 	"license": "MIT",
 	"devDependencies": {
-		"typescript": "^3.6.3"
+		"typescript": "^3.6.3",
+		"react": "^16.10.2",
+		"redux": "^4.0.4"
 	},
 	"scripts": {
 		"build": "tsc && cp package.json README.md .npmignore dist"
